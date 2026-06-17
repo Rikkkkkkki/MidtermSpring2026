@@ -76,6 +76,7 @@ public class Main {
         suitesFailed += runSuite("RulesTest",       () -> RulesTest.main(new String[]{}));
         suitesFailed += runSuite("GameStateTest",   () -> GameStateTest.main(new String[]{}));
         suitesFailed += runSuite("BotStrategyTest", () -> BotStrategyTest.main(new String[]{}));
+        suitesFailed += runSuite("FullGameTest",    () -> FullGameTest.main(new String[]{}));
 
         System.out.println("\n================================================");
         if (suitesFailed == 0) {

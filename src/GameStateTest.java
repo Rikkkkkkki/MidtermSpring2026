@@ -12,6 +12,8 @@ import java.util.Random;
  *   - drawFromDeck reshuffles discard when empty
  *   - advanceTurn wraps around in both directions
  *   - score accumulation
+ *   - HIGHER-LEVEL: multi-round game flow with state transitions
+ *   - HIGHER-LEVEL: score accumulation across multiple rounds
  */
 public class GameStateTest {
 
@@ -108,6 +110,57 @@ public class GameStateTest {
         r.check(sc.scoreOf(0) == 42, "addScore accumulates correctly");
         sc.addScore(0, 8);
         r.check(sc.scoreOf(0) == 50, "addScore accumulates across calls");
+
+        // ── HIGHER-LEVEL: Multi-round game flow with state transitions ────
+        GameState mr = makeState(3);
+        mr.resetForNewRound();
+        int initialHand0 = mr.handOf(0).size();
+        r.check(initialHand0 == 7, "Round 1: Player 0 dealt 7 cards");
+
+        // Simulate scoring in round 1
+        mr.addScore(0, 25);
+        mr.addScore(1, 15);
+        r.check(mr.scoreOf(0) == 25 && mr.scoreOf(1) == 15,
+                "After round 1: scores recorded correctly");
+
+        // Reset for round 2; scores persist, hands are redealt
+        mr.resetForNewRound();
+        r.check(mr.scoreOf(0) == 25 && mr.scoreOf(1) == 15,
+                "After reset: scores persist across rounds");
+        int round2Hand0 = mr.handOf(0).size();
+        r.check(round2Hand0 == 7, "Round 2: Player 0 re-dealt 7 cards after reset");
+
+        // Simulate more scoring in round 2
+        mr.addScore(0, 10);
+        mr.addScore(1, 20);
+        r.check(mr.scoreOf(0) == 35 && mr.scoreOf(1) == 35,
+                "After round 2: scores accumulate (25+10=35, 15+20=35)");
+
+        // Round 3 continues accumulation
+        mr.resetForNewRound();
+        r.check(mr.scoreOf(0) == 35 && mr.scoreOf(1) == 35,
+                "After reset: scores persist into round 3");
+        mr.addScore(2, 30);
+        r.check(mr.scoreOf(2) == 30, "New winner (player 2) scored 30 in round 3");
+
+        // ── HIGHER-LEVEL: Game state transition consistency ───────────────
+        // Verify currentPlayer resets and direction is set correctly
+        GameState tr = makeState(4);
+        tr.resetForNewRound();
+        tr.direction = 1;
+        tr.currentPlayer = 3;
+        r.check(tr.currentPlayer == 3, "Set current player to 3");
+
+        tr.resetForNewRound();
+        r.check(tr.direction == 1, "Direction resets to 1 (forward)");
+        r.check(tr.currentPlayer >= 0 && tr.currentPlayer < 4,
+                "Current player is valid index after reset");
+
+        // Verify hands are cleared and redealt on reset
+        tr.resetForNewRound();
+        int totalDealt = tr.handOf(0).size() + tr.handOf(1).size() +
+                tr.handOf(2).size() + tr.handOf(3).size();
+        r.check(totalDealt == 28, "All 4 players dealt 7 cards each = 28 total");
 
         r.summary();
     }
