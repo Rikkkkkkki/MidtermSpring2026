@@ -1,4 +1,5 @@
 import java.util.List;
+import java.util.logging.Logger;
 
 /**
  * Orchestrates a single round of UNO.
@@ -18,6 +19,7 @@ import java.util.List;
 public class GameEngine {
 
     private static final int SAFETY_LIMIT = 3000;
+    private static final Logger logger = Logger.getLogger("com.uno");
 
     private final GameState    state;
     private final ConsoleView  view;
@@ -33,6 +35,7 @@ public class GameEngine {
      */
     public int playRound() {
         state.resetForNewRound();
+        logger.info("Round started with players: " + String.join(", ", state.playerNames));
 
         for (int guard = 0; guard < SAFETY_LIMIT; guard++) {
             int player = state.currentPlayer;
@@ -96,6 +99,7 @@ public class GameEngine {
             state.upCard     = card;
             state.calledColor = "";
             view.showPlays(name, card);
+            logger.info(name + " played " + card.getCode());
 
             // Color declaration for wilds.
             if (card.getRank() == Card.Rank.WILD || card.getRank() == Card.Rank.WILD_DRAW_FOUR) {
@@ -117,6 +121,7 @@ public class GameEngine {
                 int points = tallyOpponentPoints(player);
                 state.addScore(player, points);
                 view.showWins(name, points);
+                logger.info(name + " wins round! Scored " + points + " points. Total: " + state.scoreOf(player));
                 return player;
             }
 
@@ -125,6 +130,7 @@ public class GameEngine {
         }
 
         view.showSafetyLimit();
+        logger.warning("Round stopped at safety limit");
         return -1;
     }
 

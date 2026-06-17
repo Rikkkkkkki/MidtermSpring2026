@@ -1,3 +1,12 @@
 out/
 .idea/
 *.iml
+target/
+*.class
+*.jar
+*.log
+.DS_Store
+Thumbs.db
+pom.xml.tag
+pom.xml.releaseBackup
+dependency-reduced-pom.xml

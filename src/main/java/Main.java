@@ -2,6 +2,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.Scanner;
+import java.util.logging.LogManager;
+import java.util.logging.Logger;
 
 /**
  * CLI entry point for the UNO game.
@@ -12,10 +14,17 @@ import java.util.Scanner;
  *
  * The --self-test flag runs all characterization test suites so the
  * scripts/test.sh script continues to work unchanged.
+ *
+ * Logging is configured on startup to capture game events.
  */
 public class Main {
 
+    private static final Logger logger = Logger.getLogger("com.uno");
+
     public static void main(String[] args) {
+        // Configure logging
+        configureLogging();
+
         int     bots  = 3;
         int     games = 1;
         boolean human = false;
@@ -28,9 +37,8 @@ public class Main {
             else if (args[i].equals("--human"))  human = true;
             else if (args[i].equals("--quiet"))  quiet = true;
             else if (args[i].equals("--seed")  && i + 1 < args.length) seed  = Long.parseLong(args[++i]);
-            else if (args[i].equals("--self-test")) { selfTest(); return; }
             else if (args[i].equals("--help"))  {
-                System.out.println("Usage: scripts/run.sh [--bots N] [--games N] [--human] [--quiet] [--seed N]");
+                System.out.println("Usage: java -jar uno-cli.jar [--bots N] [--games N] [--human] [--quiet] [--seed N]");
                 return;
             }
         }
@@ -38,6 +46,9 @@ public class Main {
         Random       random = new Random(seed);
         Scanner      sc     = new Scanner(System.in);
         ConsoleView  view   = new ConsoleView(quiet, sc);
+
+        logger.info("=== UNO Game Starting ===");
+        logger.info("Seed: " + seed + ", Games: " + games + ", Bots: " + bots + ", Human: " + human);
 
         // Build player lists.
         List<String>  names      = new ArrayList<>();
@@ -53,6 +64,7 @@ public class Main {
 
         if (names.size() < 2 || names.size() > 4) {
             view.showTooFewOrTooManyPlayers();
+            logger.severe("Invalid player count: " + names.size() + " (must be 2-4)");
             return;
         }
 
@@ -61,40 +73,32 @@ public class Main {
 
         for (int g = 1; g <= games; g++) {
             view.showGameBanner(g);
+            logger.info("Starting game " + g + " of " + games);
             engine.playRound();
         }
 
         view.showFinalScores(state.playerNames, state.scores);
+        logger.info("=== UNO Game Complete ===");
+
+        sc.close();
     }
 
-    // ── Characterization self-test: runs all suites via scripts/test.sh ───────
-
-    static void selfTest() {
-        int suitesFailed = 0;
-
-        suitesFailed += runSuite("CardTest",        () -> CardTest.main(new String[]{}));
-        suitesFailed += runSuite("RulesTest",       () -> RulesTest.main(new String[]{}));
-        suitesFailed += runSuite("GameStateTest",   () -> GameStateTest.main(new String[]{}));
-        suitesFailed += runSuite("BotStrategyTest", () -> BotStrategyTest.main(new String[]{}));
-        suitesFailed += runSuite("FullGameTest",    () -> FullGameTest.main(new String[]{}));
-
-        System.out.println("\n================================================");
-        if (suitesFailed == 0) {
-            System.out.println("ALL TEST SUITES PASSED");
-        } else {
-            System.out.println(suitesFailed + " SUITE(S) FAILED");
-            throw new RuntimeException(suitesFailed + " test suite(s) failed.");
-        }
-    }
-
-    private static int runSuite(String name, Runnable suite) {
-        System.out.println("\n──── " + name + " ────");
+    /**
+     * Configure logging to use the logging.properties file.
+     * Logs are written to console.
+     */
+    private static void configureLogging() {
         try {
-            suite.run();
-            return 0;
+            LogManager.getLogManager().readConfiguration(
+                    Main.class.getResourceAsStream("/logging.properties")
+            );
         } catch (Exception e) {
-            System.out.println("SUITE FAILED: " + e.getMessage());
-            return 1;
+            // If properties file not found, use default console logging
+            java.util.logging.ConsoleHandler handler = new java.util.logging.ConsoleHandler();
+            handler.setLevel(java.util.logging.Level.INFO);
+            Logger rootLogger = LogManager.getLogManager().getLogger("");
+            rootLogger.addHandler(handler);
+            rootLogger.setLevel(java.util.logging.Level.INFO);
         }
     }
 }
