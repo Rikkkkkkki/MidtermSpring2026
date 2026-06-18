@@ -74,7 +74,10 @@ public class Main {
         for (int g = 1; g <= games; g++) {
             view.showGameBanner(g);
             logger.info("Starting game " + g + " of " + games);
-            engine.playRound();
+            int winner = engine.playRound();
+
+            // Persist game results
+            persistGameResult(state.playerNames, state.scores, winner);
         }
 
         view.showFinalScores(state.playerNames, state.scores);
@@ -100,5 +103,23 @@ public class Main {
             rootLogger.addHandler(handler);
             rootLogger.setLevel(java.util.logging.Level.INFO);
         }
+    }
+
+    private static void persistGameResult(List<String> playerNames, int[] scores, int winnerIndex) {
+        PlayerRepository playerRepo = new PlayerRepository();
+        GameRecordRepository gameRepo = new GameRecordRepository();
+
+        for (int i = 0; i < playerNames.size(); i++) {
+            Player player = playerRepo.getOrCreatePlayer(playerNames.get(i));
+            GameRecord record = new GameRecord(
+                    player,
+                    1,  // rounds played
+                    scores[i],
+                    i == winnerIndex  // is winner
+            );
+            gameRepo.save(record);
+        }
+
+        logger.info("Game results persisted to database");
     }
 }
