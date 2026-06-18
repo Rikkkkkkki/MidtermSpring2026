@@ -5,11 +5,17 @@ import java.util.List;
 import java.util.Optional;
 
 public class PlayerRepository {
-    private static final EntityManagerFactory emf =
-            Persistence.createEntityManagerFactory("UnoGameUnit");
+    private static EntityManagerFactory emf;
+
+    private static EntityManagerFactory getEMF() {
+        if (emf == null || !emf.isOpen()) {
+            emf = Persistence.createEntityManagerFactory("UnoGameUnit");
+        }
+        return emf;
+    }
 
     public void save(Player player) {
-        EntityManager em = emf.createEntityManager();
+        EntityManager em = getEMF().createEntityManager();
         try {
             em.getTransaction().begin();
             em.persist(player);
@@ -20,7 +26,7 @@ public class PlayerRepository {
     }
 
     public Optional<Player> findByName(String name) {
-        EntityManager em = emf.createEntityManager();
+        EntityManager em = getEMF().createEntityManager();
         try {
             Player player = em.createQuery(
                             "SELECT p FROM Player p WHERE p.name = :name", Player.class)
@@ -36,7 +42,7 @@ public class PlayerRepository {
     }
 
     public List<Player> findAll() {
-        EntityManager em = emf.createEntityManager();
+        EntityManager em = getEMF().createEntityManager();
         try {
             return em.createQuery("SELECT p FROM Player p", Player.class)
                     .getResultList();

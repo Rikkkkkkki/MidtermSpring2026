@@ -4,11 +4,17 @@ import jakarta.persistence.Persistence;
 import java.util.List;
 
 public class GameRecordRepository {
-    private static final EntityManagerFactory emf =
-            Persistence.createEntityManagerFactory("UnoGameUnit");
+    private static EntityManagerFactory emf;
+
+    private static EntityManagerFactory getEMF() {
+        if (emf == null || !emf.isOpen()) {
+            emf = Persistence.createEntityManagerFactory("UnoGameUnit");
+        }
+        return emf;
+    }
 
     public void save(GameRecord record) {
-        EntityManager em = emf.createEntityManager();
+        EntityManager em = getEMF().createEntityManager();
         try {
             em.getTransaction().begin();
             em.persist(record);
@@ -25,7 +31,7 @@ public class GameRecordRepository {
     }
 
     public List<GameRecord> findAll() {
-        EntityManager em = emf.createEntityManager();
+        EntityManager em = getEMF().createEntityManager();
         try {
             return em.createQuery("SELECT g FROM GameRecord g ORDER BY g.timestamp DESC",
                             GameRecord.class)
@@ -36,7 +42,7 @@ public class GameRecordRepository {
     }
 
     public List<GameRecord> findByPlayerName(String playerName) {
-        EntityManager em = emf.createEntityManager();
+        EntityManager em = getEMF().createEntityManager();
         try {
             return em.createQuery(
                             "SELECT g FROM GameRecord g WHERE g.player.name = :name ORDER BY g.timestamp DESC",
