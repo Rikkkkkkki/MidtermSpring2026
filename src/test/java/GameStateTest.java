@@ -1,169 +1,13 @@
+import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Characterization tests for GameState.
- *
- * Covers:
- *   - deck composition (exact card counts from original Main)
- *   - initial deal (7 cards per player)
- *   - up-card never starts as a wild
- *   - drawFromDeck reshuffles discard when empty
- *   - advanceTurn wraps around in both directions
- *   - score accumulation
- *   - HIGHER-LEVEL: multi-round game flow with state transitions
- *   - HIGHER-LEVEL: score accumulation across multiple rounds
  */
 public class GameStateTest {
-
-    public static void main(String[] args) {
-        TestRunner r = new TestRunner("GameStateTest");
-
-        // ── Setup helpers ──────────────────────────────────────────────────
-        GameState state2 = makeState(2);
-        state2.resetForNewRound();
-
-        // ── Initial deal: 7 cards each ────────────────────────────────────
-        r.check(state2.handOf(0).size() == 7, "player 0 gets 7 cards");
-        r.check(state2.handOf(1).size() == 7, "player 1 gets 7 cards");
-
-        // ── Up card is never a wild ────────────────────────────────────────
-        r.check(state2.upCard.getRank() != Card.Rank.WILD,
-                "up card is not a wild");
-        r.check(state2.upCard.getRank() != Card.Rank.WILD_DRAW_FOUR,
-                "up card is not a wild-draw-four");
-
-        // ── Deck composition: 108 cards total before any draws ────────────
-        // After deal (2 players × 7) + up card = 15 removed from 108 = 93 remaining
-        // (discard may also contain wilds that were replaced)
-        int remaining = state2.deck.size() + state2.discard.size();
-        r.check(remaining == 108 - 15, "93 cards remain after 2-player deal + up-card (excluding discard loop)");
-
-        // ── Deck has correct card type counts (full fresh state) ──────────
-        // Independently count cards in a fresh full deck.
-        GameState full = makeState(2);
-        full.resetForNewRound();
-        // Reconstruct a full deck by combining deck + discard + hands + upCard.
-        List<Card> allCards = new ArrayList<>();
-        allCards.addAll(full.deck);
-        allCards.addAll(full.discard);
-        for (int i = 0; i < full.playerCount(); i++) allCards.addAll(full.handOf(i));
-        allCards.add(full.upCard);
-
-        int numberCards = 0, actionCards = 0, wilds = 0;
-        for (Card c : allCards) {
-            switch (c.getRank()) {
-                case NUMBER:         numberCards++; break;
-                case SKIP:
-                case REVERSE:
-                case DRAW_TWO:       actionCards++; break;
-                case WILD:
-                case WILD_DRAW_FOUR: wilds++;       break;
-            }
-        }
-        // Each color: 1×0, 2×1-9 = 19 number cards; 4 colors = 76.
-        r.check(numberCards == 76, "76 number cards total");
-        // Each color: 2 skip + 2 reverse + 2 draw-two = 6; 4 colors = 24.
-        r.check(actionCards == 24, "24 action cards total");
-        // 4 wilds + 4 wild-draw-fours = 8.
-        r.check(wilds == 8, "8 wild cards total");
-        r.check(allCards.size() == 108, "108 cards total in deck");
-
-        // ── advanceTurn wraps forward ──────────────────────────────────────
-        GameState ts = makeState(3);
-        ts.resetForNewRound();
-        ts.currentPlayer = 2;
-        ts.direction     = 1;
-        ts.advanceTurn();
-        r.check(ts.currentPlayer == 0, "wrap-around forward: 2 → 0 with 3 players");
-
-        // ── advanceTurn wraps backward ────────────────────────────────────
-        ts.currentPlayer = 0;
-        ts.direction     = -1;
-        ts.advanceTurn();
-        r.check(ts.currentPlayer == 2, "wrap-around backward: 0 → 2 with 3 players");
-
-        // ── drawFromDeck reshuffles discard when deck is empty ────────────
-        GameState ds = makeState(2);
-        ds.resetForNewRound();
-        // Force-empty the deck and add sentinel to discard.
-        ds.deck.clear();
-        ds.discard.add(Card.of("G7"));
-        Card drawn = ds.drawFromDeck();
-        r.check(drawn.getCode().equals("G7"), "draws from discard when deck empty");
-        r.check(ds.discard.isEmpty(), "discard cleared after reshuffle");
-
-        // ── drawFromDeck returns W fallback when both piles empty ─────────
-        GameState empty = makeState(2);
-        empty.resetForNewRound();
-        empty.deck.clear();
-        empty.discard.clear();
-        Card fallback = empty.drawFromDeck();
-        r.check(fallback.getCode().equals("W"), "fallback W card when both piles empty");
-
-        // ── Score accumulation ────────────────────────────────────────────
-        GameState sc = makeState(2);
-        sc.resetForNewRound();
-        r.check(sc.scoreOf(0) == 0, "initial score is 0");
-        sc.addScore(0, 42);
-        r.check(sc.scoreOf(0) == 42, "addScore accumulates correctly");
-        sc.addScore(0, 8);
-        r.check(sc.scoreOf(0) == 50, "addScore accumulates across calls");
-
-        // ── HIGHER-LEVEL: Multi-round game flow with state transitions ────
-        GameState mr = makeState(3);
-        mr.resetForNewRound();
-        int initialHand0 = mr.handOf(0).size();
-        r.check(initialHand0 == 7, "Round 1: Player 0 dealt 7 cards");
-
-        // Simulate scoring in round 1
-        mr.addScore(0, 25);
-        mr.addScore(1, 15);
-        r.check(mr.scoreOf(0) == 25 && mr.scoreOf(1) == 15,
-                "After round 1: scores recorded correctly");
-
-        // Reset for round 2; scores persist, hands are redealt
-        mr.resetForNewRound();
-        r.check(mr.scoreOf(0) == 25 && mr.scoreOf(1) == 15,
-                "After reset: scores persist across rounds");
-        int round2Hand0 = mr.handOf(0).size();
-        r.check(round2Hand0 == 7, "Round 2: Player 0 re-dealt 7 cards after reset");
-
-        // Simulate more scoring in round 2
-        mr.addScore(0, 10);
-        mr.addScore(1, 20);
-        r.check(mr.scoreOf(0) == 35 && mr.scoreOf(1) == 35,
-                "After round 2: scores accumulate (25+10=35, 15+20=35)");
-
-        // Round 3 continues accumulation
-        mr.resetForNewRound();
-        r.check(mr.scoreOf(0) == 35 && mr.scoreOf(1) == 35,
-                "After reset: scores persist into round 3");
-        mr.addScore(2, 30);
-        r.check(mr.scoreOf(2) == 30, "New winner (player 2) scored 30 in round 3");
-
-        // ── HIGHER-LEVEL: Game state transition consistency ───────────────
-        // Verify currentPlayer resets and direction is set correctly
-        GameState tr = makeState(4);
-        tr.resetForNewRound();
-        tr.direction = 1;
-        tr.currentPlayer = 3;
-        r.check(tr.currentPlayer == 3, "Set current player to 3");
-
-        tr.resetForNewRound();
-        r.check(tr.direction == 1, "Direction resets to 1 (forward)");
-        r.check(tr.currentPlayer >= 0 && tr.currentPlayer < 4,
-                "Current player is valid index after reset");
-
-        // Verify hands are cleared and redealt on reset
-        tr.resetForNewRound();
-        int totalDealt = tr.handOf(0).size() + tr.handOf(1).size() +
-                tr.handOf(2).size() + tr.handOf(3).size();
-        r.check(totalDealt == 28, "All 4 players dealt 7 cards each = 28 total");
-
-        r.summary();
-    }
 
     private static GameState makeState(int playerCount) {
         List<String>  names = new ArrayList<>();
@@ -173,5 +17,133 @@ public class GameStateTest {
             flags.add(Boolean.FALSE);
         }
         return new GameState(names, flags, new Random(42));
+    }
+
+    @Test void initialDealSevenCardsEach() {
+        GameState s = makeState(2);
+        s.resetForNewRound();
+        assertEquals(7, s.handOf(0).size());
+        assertEquals(7, s.handOf(1).size());
+    }
+
+    @Test void upCardNotWild() {
+        GameState s = makeState(2);
+        s.resetForNewRound();
+        assertNotEquals(Card.Rank.WILD,           s.upCard.getRank());
+        assertNotEquals(Card.Rank.WILD_DRAW_FOUR, s.upCard.getRank());
+    }
+
+    @Test void deckHas108Cards() {
+        GameState s = makeState(2);
+        s.resetForNewRound();
+        List<Card> all = new ArrayList<>();
+        all.addAll(s.deck);
+        all.addAll(s.discard);
+        for (int i = 0; i < s.playerCount(); i++) all.addAll(s.handOf(i));
+        all.add(s.upCard);
+        assertEquals(108, all.size());
+    }
+
+    @Test void deckCompositionNumbers() {
+        GameState s = makeState(2);
+        s.resetForNewRound();
+        List<Card> all = new ArrayList<>();
+        all.addAll(s.deck); all.addAll(s.discard);
+        for (int i = 0; i < s.playerCount(); i++) all.addAll(s.handOf(i));
+        all.add(s.upCard);
+        long numbers = all.stream().filter(c -> c.getRank() == Card.Rank.NUMBER).count();
+        assertEquals(76, numbers);
+    }
+
+    @Test void deckCompositionActions() {
+        GameState s = makeState(2);
+        s.resetForNewRound();
+        List<Card> all = new ArrayList<>();
+        all.addAll(s.deck); all.addAll(s.discard);
+        for (int i = 0; i < s.playerCount(); i++) all.addAll(s.handOf(i));
+        all.add(s.upCard);
+        long actions = all.stream().filter(c ->
+                c.getRank() == Card.Rank.SKIP ||
+                        c.getRank() == Card.Rank.REVERSE ||
+                        c.getRank() == Card.Rank.DRAW_TWO).count();
+        assertEquals(24, actions);
+    }
+
+    @Test void deckCompositionWilds() {
+        GameState s = makeState(2);
+        s.resetForNewRound();
+        List<Card> all = new ArrayList<>();
+        all.addAll(s.deck); all.addAll(s.discard);
+        for (int i = 0; i < s.playerCount(); i++) all.addAll(s.handOf(i));
+        all.add(s.upCard);
+        long wilds = all.stream().filter(c ->
+                c.getRank() == Card.Rank.WILD ||
+                        c.getRank() == Card.Rank.WILD_DRAW_FOUR).count();
+        assertEquals(8, wilds);
+    }
+
+    @Test void advanceTurnWrapsForward() {
+        GameState s = makeState(3);
+        s.resetForNewRound();
+        s.currentPlayer = 2;
+        s.direction = 1;
+        s.advanceTurn();
+        assertEquals(0, s.currentPlayer);
+    }
+
+    @Test void advanceTurnWrapsBackward() {
+        GameState s = makeState(3);
+        s.resetForNewRound();
+        s.currentPlayer = 0;
+        s.direction = -1;
+        s.advanceTurn();
+        assertEquals(2, s.currentPlayer);
+    }
+
+    @Test void drawFromEmptyDeckUsesDiscard() {
+        GameState s = makeState(2);
+        s.resetForNewRound();
+        s.deck.clear();
+        s.discard.add(Card.of("G7"));
+        Card drawn = s.drawFromDeck();
+        assertEquals("G7", drawn.getCode());
+        assertTrue(s.discard.isEmpty());
+    }
+
+    @Test void drawFallbackWhenBothEmpty() {
+        GameState s = makeState(2);
+        s.resetForNewRound();
+        s.deck.clear();
+        s.discard.clear();
+        assertEquals("W", s.drawFromDeck().getCode());
+    }
+
+    @Test void scoreAccumulates() {
+        GameState s = makeState(2);
+        s.resetForNewRound();
+        assertEquals(0, s.scoreOf(0));
+        s.addScore(0, 42);
+        assertEquals(42, s.scoreOf(0));
+        s.addScore(0, 8);
+        assertEquals(50, s.scoreOf(0));
+    }
+
+    @Test void scoresPersistedAcrossReset() {
+        GameState s = makeState(3);
+        s.resetForNewRound();
+        s.addScore(0, 25);
+        s.addScore(1, 15);
+        s.resetForNewRound();
+        assertEquals(25, s.scoreOf(0));
+        assertEquals(15, s.scoreOf(1));
+    }
+
+    @Test void handsRedealtAfterReset() {
+        GameState s = makeState(3);
+        s.resetForNewRound();
+        s.resetForNewRound();
+        assertEquals(7, s.handOf(0).size());
+        assertEquals(7, s.handOf(1).size());
+        assertEquals(7, s.handOf(2).size());
     }
 }

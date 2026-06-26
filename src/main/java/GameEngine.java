@@ -3,26 +3,14 @@ import java.util.logging.Logger;
 
 /**
  * Orchestrates a single round of UNO.
- *
- * Extracted from the giant game loop inside Main.playGame().
- * GameEngine owns the turn flow and delegates to:
- *   - GameState  for mutable data and deck operations
- *   - Rules      for legality checks and scoring
- *   - BotStrategy for bot card/color selection
- *   - ConsoleView for all output and human input
- *
- * No System.out calls appear here; that keeps rule logic independently testable.
- *
- * Card effect handling (skip, reverse, draw-two, wild, wild-draw-four) is
- * identical to the original Main so characterized behavior is preserved.
  */
 public class GameEngine {
 
     private static final int SAFETY_LIMIT = 3000;
     private static final Logger logger = Logger.getLogger("com.uno");
 
-    private final GameState    state;
-    private final ConsoleView  view;
+    private final GameState   state;
+    private final ConsoleView view;
 
     public GameEngine(GameState state, ConsoleView view) {
         this.state = state;
@@ -30,7 +18,7 @@ public class GameEngine {
     }
 
     /**
-     * Play one complete round.  Returns the index of the winning player,
+     * Play one complete round. Returns the index of the winning player,
      * or -1 if the safety limit was reached.
      */
     public int playRound() {
@@ -41,6 +29,11 @@ public class GameEngine {
             int player = state.currentPlayer;
             String name = state.nameOf(player);
             List<Card> hand = state.handOf(player);
+
+            // LOG: player turn start
+            logger.info(name + "'s turn. Hand size: " + hand.size()
+                    + ". Up card: " + state.upCard.getCode()
+                    + (state.calledColor.isEmpty() ? "" : " called " + state.calledColor));
 
             view.showTurnHeader(name, state.upCard, state.calledColor, hand);
 
@@ -55,11 +48,13 @@ public class GameEngine {
             if (chosen == -1) {
                 Card drawn = state.drawFromDeck();
                 hand.add(drawn);
+
+                // LOG: card drawn
+                logger.info(name + " draws " + drawn.getCode());
                 view.showDraw(name, drawn);
 
                 if (Rules.isLegal(drawn, state.upCard, state.calledColor)) {
                     if (!state.humanAt(player)) {
-                        // Bots auto-play a drawn card when legal.
                         chosen = hand.size() - 1;
                     } else {
                         if (view.promptPlayDrawnCard(drawn)) {
@@ -70,14 +65,15 @@ public class GameEngine {
             }
 
             if (chosen < 0) {
-                // Player drew and did not play; turn passes.
                 state.advanceTurn();
                 continue;
             }
 
             // ── Play-phase legality checks ─────────────────────────────────
             if (chosen >= hand.size()) {
-                // Invalid index — penalty card and turn loss (original quirk preserved).
+                // LOG: invalid index input
+                logger.warning(name + " selected invalid index " + chosen
+                        + " (hand size " + hand.size() + ") — penalty card issued");
                 view.showPenaltyInvalidIndex(name);
                 hand.add(state.drawFromDeck());
                 state.advanceTurn();
@@ -86,7 +82,11 @@ public class GameEngine {
 
             Card card = hand.get(chosen);
             if (!Rules.isLegal(card, state.upCard, state.calledColor)) {
-                // Illegal card by index — penalty card and turn loss (original quirk preserved).
+                // LOG: illegal card attempt
+                logger.warning(name + " attempted illegal card " + card.getCode()
+                        + " on up card " + state.upCard.getCode()
+                        + (state.calledColor.isEmpty() ? "" : " (called " + state.calledColor + ")")
+                        + " — penalty card issued");
                 view.showPenaltyIllegalCard(name, card);
                 hand.add(state.drawFromDeck());
                 state.advanceTurn();
@@ -99,6 +99,8 @@ public class GameEngine {
             state.upCard     = card;
             state.calledColor = "";
             view.showPlays(name, card);
+
+            // LOG: card played
             logger.info(name + " played " + card.getCode());
 
             // Color declaration for wilds.
@@ -109,11 +111,13 @@ public class GameEngine {
                     state.calledColor = BotStrategy.chooseColor(hand);
                 }
                 view.showCallsColor(name, state.calledColor);
+                logger.info(name + " called color " + state.calledColor);
             }
 
             // UNO announcement.
             if (hand.size() == 1) {
                 view.showUno(name);
+                logger.info(name + " says UNO!");
             }
 
             // ── Win check ──────────────────────────────────────────────────
@@ -121,7 +125,10 @@ public class GameEngine {
                 int points = tallyOpponentPoints(player);
                 state.addScore(player, points);
                 view.showWins(name, points);
-                logger.info(name + " wins round! Scored " + points + " points. Total: " + state.scoreOf(player));
+
+                // LOG: round end
+                logger.info(name + " wins round! Scored " + points
+                        + " points. Total: " + state.scoreOf(player));
                 return player;
             }
 
@@ -134,23 +141,16 @@ public class GameEngine {
         return -1;
     }
 
-    // ── Private helpers ────────────────────────────────────────────────────
-
-    /**
-     * Apply the effect of the just-played card.
-     * Mirrors the if-else chain from the original Main.playGame().
-     */
     private void applyCardEffect(Card card, String currentPlayerName) {
         switch (card.getRank()) {
             case SKIP:
-                state.advanceTurn();   // skip the next player
+                state.advanceTurn();
                 state.advanceTurn();
                 break;
 
             case REVERSE:
                 state.direction *= -1;
                 if (state.playerCount() == 2) {
-                    // With 2 players, reverse acts as skip (original behavior).
                     state.advanceTurn();
                     state.advanceTurn();
                 } else {
@@ -163,6 +163,7 @@ public class GameEngine {
                 state.handOf(state.currentPlayer).add(state.drawFromDeck());
                 state.handOf(state.currentPlayer).add(state.drawFromDeck());
                 view.showDrawsTwo(state.nameOf(state.currentPlayer));
+                logger.info(state.nameOf(state.currentPlayer) + " draws two cards from Draw Two effect");
                 state.advanceTurn();
                 break;
 
@@ -172,17 +173,16 @@ public class GameEngine {
                     state.handOf(state.currentPlayer).add(state.drawFromDeck());
                 }
                 view.showDrawsFour(state.nameOf(state.currentPlayer));
+                logger.info(state.nameOf(state.currentPlayer) + " draws four cards from Wild Draw Four effect");
                 state.advanceTurn();
                 break;
 
             default:
-                // WILD (color only), NUMBER, etc.
                 state.advanceTurn();
                 break;
         }
     }
 
-    /** Sum the point value of every hand except the winner's. */
     private int tallyOpponentPoints(int winnerIndex) {
         int total = 0;
         for (int i = 0; i < state.playerCount(); i++) {
