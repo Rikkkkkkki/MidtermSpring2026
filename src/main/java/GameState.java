@@ -15,7 +15,7 @@ import java.util.Random;
  * the original Main.playGame() so all characterized behavior is preserved.
  */
 public class GameState {
-
+    public int lastWinner = -1;
     // Player data
     final List<String>       playerNames  = new ArrayList<>();
     final List<Boolean>      isHuman      = new ArrayList<>();

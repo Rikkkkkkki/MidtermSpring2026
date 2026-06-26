@@ -59,4 +59,31 @@ public class GameRecordRepository {
             emf.close();
         }
     }
+
+    public GameRecord getHighestScore() {
+        EntityManager em = getEMF().createEntityManager();
+        try {
+            List<GameRecord> results = em.createQuery(
+                            "SELECT g FROM GameRecord g ORDER BY g.finalScore DESC",
+                            GameRecord.class)
+                    .setMaxResults(1)
+                    .getResultList();
+            return results.isEmpty() ? null : results.get(0);
+        } finally {
+            em.close();
+        }
+    }
+
+    public long getWinCount(String playerName) {
+        EntityManager em = getEMF().createEntityManager();
+        try {
+            return em.createQuery(
+                            "SELECT COUNT(g) FROM GameRecord g WHERE g.player.name = :name AND g.winner = true",
+                            Long.class)
+                    .setParameter("name", playerName)
+                    .getSingleResult();
+        } finally {
+            em.close();
+        }
+    }
 }

@@ -1,69 +1,85 @@
-# UNO Game Persistence Documentation
+# Database Documentation
 
 ## Database
 
 - **Type**: H2 Embedded Database
-- **Location**: `./unodata.h2.db` (created automatically)
-- **No external setup required** - works out of the box
+- **Production file**: `./unodata.mv.db` (created automatically on first run)
+- **Test database**: in-memory (`jdbc:h2:mem:unotest`) — no file, no setup required
 
 ## ORM Framework
 
-- **Framework**: JPA/Hibernate
-- **Config**: `src/main/resources/META-INF/persistence.xml`
+- **Framework**: Hibernate 6 / Jakarta Persistence (JPA 3.0)
+- **Config file**: `src/main/resources/META-INF/persistence.xml`
+- **Persistence units**:
+    - `UnoGameUnit` — file-based H2, used during normal gameplay
+    - `UnoTestUnit` — in-memory H2, used by `PersistenceTest`
 
 ## Schema
 
-### Players Table
-```sql
-CREATE TABLE players (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(255) NOT NULL UNIQUE
-);
-```
+Schema is created automatically by Hibernate (`hbm2ddl.auto`). The logical structure is:
 
-### Game Records Table
-```sql
-CREATE TABLE game_records (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    player_id BIGINT NOT NULL,
-    rounds_played INT NOT NULL,
-    final_score INT NOT NULL,
-    winner BOOLEAN NOT NULL,
-    timestamp TIMESTAMP NOT NULL,
-    FOREIGN KEY (player_id) REFERENCES players(id)
-);
-```
+### players
+| Column | Type         | Notes          |
+|--------|--------------|----------------|
+| id     | BIGINT (PK)  | auto-generated |
+| name   | VARCHAR(255) | unique         |
 
-## Running Tests
+### game_sessions
+| Column        | Type      | Notes                        |
+|---------------|-----------|------------------------------|
+| id            | BIGINT PK | auto-generated               |
+| start_time    | TIMESTAMP | when the session began       |
+| end_time      | TIMESTAMP | when the session completed   |
+| rounds_played | INT       | number of rounds in session  |
 
-```bash
-mvn test
-```
-
-Tests use an isolated in-memory H2 database.
-
-## Querying Game History
-
-```bash
-# View recent 10 games
-java -jar target/uno-cli.jar --stats recent
-
-# View player wins
-java -jar target/uno-cli.jar --stats wins Player1
-
-# View highest score
-java -jar target/uno-cli.jar --stats highest
-```
+### game_records
+| Column      | Type      | Notes                              |
+|-------------|-----------|------------------------------------|
+| id          | BIGINT PK | auto-generated                     |
+| session_id  | BIGINT FK | references game_sessions           |
+| player_id   | BIGINT FK | references players                 |
+| final_score | INT       | cumulative score for this session  |
+| winner      | BOOLEAN   | true for the session winner        |
+| timestamp   | TIMESTAMP | when this record was written       |
 
 ## Persistence Classes
 
-- **Entities**: `Player.java`, `GameRecord.java`
-- **Repositories**: `PlayerRepository.java`, `GameRecordRepository.java`
-- **Queries**: `GameQueries.java`
-- **Tests**: `GameRecordRepositoryTest.java`
+| Class                    | Role                                      |
+|--------------------------|-------------------------------------------|
+| `Player.java`            | Entity: player identity                   |
+| `GameSession.java`       | Entity: one completed game session        |
+| `GameRecord.java`        | Entity: one player's result in a session  |
+| `PlayerRepository.java`  | Save and look up players                  |
+| `GameSessionRepository.java` | Save sessions, query recent games     |
+| `GameRecordRepository.java`  | Save records, win count, top score    |
+
+## Running Persistence Tests
+
+```bash
+javac -cp <classpath> PersistenceTest.java
+java  -cp <classpath> PersistenceTest
+```
+
+`PersistenceTest` uses `UnoTestUnit` (in-memory H2) and is fully self-contained.
+No database file, no external service, and no manual setup is needed.
+
+## CLI Report Commands
+
+Run these instead of starting a game:
+
+```bash
+# List the 10 most recent game sessions with per-player scores
+java -jar uno-cli.jar --report-recent
+
+# Show how many times a named player has won
+java -jar uno-cli.jar --report-wins Bot1
+
+# Show the player with the single highest recorded score
+java -jar uno-cli.jar --report-top
+```
 
 ## Notes
 
-- All game results are automatically saved after each game
-- No manual database configuration needed
-- Database is in-memory for tests, H2 file-based for production
+- `hbm2ddl.auto=update` is used in production so existing game history is never deleted between runs.
+- `hbm2ddl.auto=create-drop` is used in tests so each test run starts with a clean schema.
+- No database credentials are hardcoded beyond the default H2 embedded user (`sa` / empty password), which is H2's standard and requires no configuration.
