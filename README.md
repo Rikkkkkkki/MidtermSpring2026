@@ -1,4 +1,3 @@
-cat > README.md << 'EOF'
 # UNO CLI Game
 
 ## Quick Start
@@ -29,4 +28,3 @@ docker run uno-cli:latest --bots 2
 ```
 
 See full documentation in the project files.
-EOF
