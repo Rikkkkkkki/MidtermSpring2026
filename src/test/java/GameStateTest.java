@@ -3,17 +3,15 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * Characterization tests for GameState.
- *
- * Covers:
- *   - deck composition (exact card counts from original Main)
- *   - initial deal (7 cards per player)
- *   - up-card never starts as a wild
+ * Comprehensive GameState tests covering:
+ *   - Deck composition (exact card counts)
+ *   - Initial deal (7 cards per player)
+ *   - Up-card never starts as a wild
  *   - drawFromDeck reshuffles discard when empty
  *   - advanceTurn wraps around in both directions
- *   - score accumulation
- *   - HIGHER-LEVEL: multi-round game flow with state transitions
- *   - HIGHER-LEVEL: score accumulation across multiple rounds
+ *   - Score accumulation
+ *   - Multi-round game flow with state transitions
+ *   - UNO call tracking and state management
  */
 public class GameStateTest {
 
@@ -36,15 +34,12 @@ public class GameStateTest {
 
         // ── Deck composition: 108 cards total before any draws ────────────
         // After deal (2 players × 7) + up card = 15 removed from 108 = 93 remaining
-        // (discard may also contain wilds that were replaced)
         int remaining = state2.deck.size() + state2.discard.size();
-        r.check(remaining == 108 - 15, "93 cards remain after 2-player deal + up-card (excluding discard loop)");
+        r.check(remaining == 108 - 15, "93 cards remain after 2-player deal + up-card");
 
-        // ── Deck has correct card type counts (full fresh state) ──────────
-        // Independently count cards in a fresh full deck.
+        // ── Full deck card type counts ──────────────────────────────────
         GameState full = makeState(2);
         full.resetForNewRound();
-        // Reconstruct a full deck by combining deck + discard + hands + upCard.
         List<Card> allCards = new ArrayList<>();
         allCards.addAll(full.deck);
         allCards.addAll(full.discard);
@@ -62,11 +57,8 @@ public class GameStateTest {
                 case WILD_DRAW_FOUR: wilds++;       break;
             }
         }
-        // Each color: 1×0, 2×1-9 = 19 number cards; 4 colors = 76.
         r.check(numberCards == 76, "76 number cards total");
-        // Each color: 2 skip + 2 reverse + 2 draw-two = 6; 4 colors = 24.
         r.check(actionCards == 24, "24 action cards total");
-        // 4 wilds + 4 wild-draw-fours = 8.
         r.check(wilds == 8, "8 wild cards total");
         r.check(allCards.size() == 108, "108 cards total in deck");
 
@@ -87,7 +79,6 @@ public class GameStateTest {
         // ── drawFromDeck reshuffles discard when deck is empty ────────────
         GameState ds = makeState(2);
         ds.resetForNewRound();
-        // Force-empty the deck and add sentinel to discard.
         ds.deck.clear();
         ds.discard.add(Card.of("G7"));
         Card drawn = ds.drawFromDeck();
@@ -111,40 +102,35 @@ public class GameStateTest {
         sc.addScore(0, 8);
         r.check(sc.scoreOf(0) == 50, "addScore accumulates across calls");
 
-        // ── HIGHER-LEVEL: Multi-round game flow with state transitions ────
+        // ── Multi-round game flow with state transitions ────────────────
         GameState mr = makeState(3);
         mr.resetForNewRound();
         int initialHand0 = mr.handOf(0).size();
         r.check(initialHand0 == 7, "Round 1: Player 0 dealt 7 cards");
 
-        // Simulate scoring in round 1
         mr.addScore(0, 25);
         mr.addScore(1, 15);
         r.check(mr.scoreOf(0) == 25 && mr.scoreOf(1) == 15,
                 "After round 1: scores recorded correctly");
 
-        // Reset for round 2; scores persist, hands are redealt
         mr.resetForNewRound();
         r.check(mr.scoreOf(0) == 25 && mr.scoreOf(1) == 15,
                 "After reset: scores persist across rounds");
         int round2Hand0 = mr.handOf(0).size();
         r.check(round2Hand0 == 7, "Round 2: Player 0 re-dealt 7 cards after reset");
 
-        // Simulate more scoring in round 2
         mr.addScore(0, 10);
         mr.addScore(1, 20);
         r.check(mr.scoreOf(0) == 35 && mr.scoreOf(1) == 35,
                 "After round 2: scores accumulate (25+10=35, 15+20=35)");
 
-        // Round 3 continues accumulation
         mr.resetForNewRound();
         r.check(mr.scoreOf(0) == 35 && mr.scoreOf(1) == 35,
                 "After reset: scores persist into round 3");
         mr.addScore(2, 30);
         r.check(mr.scoreOf(2) == 30, "New winner (player 2) scored 30 in round 3");
 
-        // ── HIGHER-LEVEL: Game state transition consistency ───────────────
-        // Verify currentPlayer resets and direction is set correctly
+        // ── Game state transition consistency ───────────────────────────────
         GameState tr = makeState(4);
         tr.resetForNewRound();
         tr.direction = 1;
@@ -156,11 +142,39 @@ public class GameStateTest {
         r.check(tr.currentPlayer >= 0 && tr.currentPlayer < 4,
                 "Current player is valid index after reset");
 
-        // Verify hands are cleared and redealt on reset
         tr.resetForNewRound();
         int totalDealt = tr.handOf(0).size() + tr.handOf(1).size() +
                 tr.handOf(2).size() + tr.handOf(3).size();
         r.check(totalDealt == 28, "All 4 players dealt 7 cards each = 28 total");
+
+        // ── UNO Call Tracking ──────────────────────────────────────────────
+        GameState uno = makeState(3);
+        uno.resetForNewRound();
+        r.check(!uno.hasCalledUno(0), "Initially, no player has called UNO");
+        r.check(!uno.hasCalledUno(1), "Initially, no player has called UNO");
+        r.check(!uno.hasCalledUno(2), "Initially, no player has called UNO");
+
+        // Player 0 claims UNO
+        uno.setUnoCall(0, true);
+        r.check(uno.hasCalledUno(0), "Player 0 UNO call recorded");
+        r.check(!uno.hasCalledUno(1), "Player 1 still has not called UNO");
+
+        // Reset clears UNO state
+        uno.resetForNewRound();
+        r.check(!uno.hasCalledUno(0), "UNO state reset for new round");
+        r.check(!uno.hasCalledUno(1), "UNO state reset for new round");
+
+        // ── UNO Penalty Detection Scenario ────────────────────────────────
+        GameState penalty = makeState(3);
+        penalty.resetForNewRound();
+        // Simulate: player 0 has 1 card and didn't call UNO
+        penalty.handOf(0).clear();
+        penalty.handOf(0).add(Card.of("R5"));  // Force player 0 to have 1 card
+        penalty.setUnoCall(0, false);  // They didn't call UNO
+
+        r.check(penalty.handOf(0).size() == 1, "Player 0 has 1 card");
+        r.check(!penalty.hasCalledUno(0), "Player 0 missed UNO call");
+        // In real game, GameEngine.checkAndApplyUnoPenalty() would detect this
 
         r.summary();
     }

@@ -7,12 +7,14 @@ import java.util.Random;
  * Mutable game state for one session of UNO.
  *
  * Extracts all global static fields from the original Main into a single
- * owned object.  The game loop in GameEngine operates on this state.
+ * owned object. The game loop in GameEngine operates on this state.
  * Keeping state here makes it possible to run multiple independent games
  * without the globals from the original interfering with each other.
  *
  * The deck composition, shuffle order, and initial deal are identical to
  * the original Main.playGame() so all characterized behavior is preserved.
+ *
+ * Tracks UNO call state for penalty enforcement.
  */
 public class GameState {
     public int lastWinner = -1;
@@ -32,15 +34,20 @@ public class GameState {
     int                      currentPlayer = 0;
     int                      direction     = 1;   //  1 = clockwise, -1 = counter
 
+    // UNO call tracking: tracks if player called UNO when they had 1 card
+    final boolean[]          unoCalledThisTurn;
+
     private final Random     random;
 
     public GameState(List<String> names, List<Boolean> humanFlags, Random random) {
         this.random = random;
         this.scores = new int[names.size()];
+        this.unoCalledThisTurn = new boolean[names.size()];
         for (int i = 0; i < names.size(); i++) {
             playerNames.add(names.get(i));
             isHuman.add(humanFlags.get(i));
             hands.add(new ArrayList<>());
+            unoCalledThisTurn[i] = false;
         }
     }
 
@@ -53,6 +60,9 @@ public class GameState {
         discard.clear();
         for (List<Card> hand : hands) {
             hand.clear();
+        }
+        for (int i = 0; i < unoCalledThisTurn.length; i++) {
+            unoCalledThisTurn[i] = false;
         }
 
         String[] colors = {"R", "Y", "G", "B"};
@@ -123,4 +133,6 @@ public class GameState {
     public List<Card> handOf(int i)    { return hands.get(i); }
     public int scoreOf(int i)          { return scores[i]; }
     public void addScore(int i, int n) { scores[i] += n; }
+    public boolean hasCalledUno(int i) { return unoCalledThisTurn[i]; }
+    public void setUnoCall(int i, boolean called) { unoCalledThisTurn[i] = called; }
 }

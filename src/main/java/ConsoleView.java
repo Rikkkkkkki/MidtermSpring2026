@@ -5,7 +5,7 @@ import java.util.Scanner;
  * Console rendering and human input for the UNO CLI.
  *
  * All System.out output and Scanner reads from the original Main are
- * consolidated here.  GameEngine calls this view for display and for
+ * consolidated here. GameEngine calls this view for display and for
  * prompting the human player; it never writes to System.out directly.
  *
  * This boundary makes it straightforward to replace the CLI display
@@ -13,6 +13,8 @@ import java.util.Scanner;
  *
  * Prompt wording and output format are preserved exactly from the original
  * so characterized integration behavior is not broken.
+ *
+ * Includes output for UNO call penalties.
  */
 public class ConsoleView {
 
@@ -68,6 +70,10 @@ public class ConsoleView {
 
     public void showUno(String playerName) {
         if (!quiet) System.out.println(playerName + " says UNO!");
+    }
+
+    public void showUnoPenalty(String playerName) {
+        if (!quiet) System.out.println(playerName + " missed UNO! Drawing 2 penalty cards.");
     }
 
     public void showWins(String playerName, int points) {

@@ -15,6 +15,8 @@ import java.util.logging.Logger;
  *
  * Card effect handling (skip, reverse, draw-two, wild, wild-draw-four) is
  * identical to the original Main so characterized behavior is preserved.
+ *
+ * Implements UNO call detection and penalty enforcement.
  */
 public class GameEngine {
 
@@ -30,7 +32,7 @@ public class GameEngine {
     }
 
     /**
-     * Play one complete round.  Returns the index of the winning player,
+     * Play one complete round. Returns the index of the winning player,
      * or -1 if the safety limit was reached.
      */
     public int playRound() {
@@ -41,6 +43,10 @@ public class GameEngine {
             int player = state.currentPlayer;
             String name = state.nameOf(player);
             List<Card> hand = state.handOf(player);
+
+            // ── UNO Penalty Check ──────────────────────────────────────────
+            // If last player now has 1 card and didn't call UNO, penalize them
+            checkAndApplyUnoPenalty(player);
 
             view.showTurnHeader(name, state.upCard, state.calledColor, hand);
 
@@ -75,7 +81,7 @@ public class GameEngine {
                 continue;
             }
 
-            // ── Play-phase legality checks ─────────────────────────────────
+            // ── Play-phase legality checks ────────────────────────────────
             if (chosen >= hand.size()) {
                 // Invalid index — penalty card and turn loss (original quirk preserved).
                 view.showPenaltyInvalidIndex(name);
@@ -101,6 +107,9 @@ public class GameEngine {
             view.showPlays(name, card);
             logger.info(name + " played " + card.getCode());
 
+            // Reset UNO call for this player (they played, so UNO state resets)
+            state.setUnoCall(player, false);
+
             // Color declaration for wilds.
             if (card.getRank() == Card.Rank.WILD || card.getRank() == Card.Rank.WILD_DRAW_FOUR) {
                 if (state.humanAt(player)) {
@@ -111,15 +120,17 @@ public class GameEngine {
                 view.showCallsColor(name, state.calledColor);
             }
 
-            // UNO announcement.
+            // ── UNO announcement ───────────────────────────────────────────
             if (hand.size() == 1) {
                 view.showUno(name);
+                state.setUnoCall(player, true);
             }
 
             // ── Win check ──────────────────────────────────────────────────
             if (hand.isEmpty()) {
                 int points = tallyOpponentPoints(player);
                 state.addScore(player, points);
+                state.lastWinner = player;
                 view.showWins(name, points);
                 logger.info(name + " wins round! Scored " + points + " points. Total: " + state.scoreOf(player));
                 return player;
@@ -135,6 +146,28 @@ public class GameEngine {
     }
 
     // ── Private helpers ────────────────────────────────────────────────────
+
+    /**
+     * Check if the current player has 1 card but didn't call UNO on their last turn.
+     * If so, they draw 2 penalty cards (but keep their 1 card).
+     * This implements the rule: if you reach 1 card and don't announce UNO
+     * before the next relevant action, you're penalized.
+     */
+    private void checkAndApplyUnoPenalty(int currentPlayer) {
+        // Look at the previous player
+        int prevPlayer = currentPlayer - state.direction;
+        if (prevPlayer >= state.playerCount()) prevPlayer = 0;
+        if (prevPlayer < 0) prevPlayer = state.playerCount() - 1;
+
+        // If the previous player has 1 card but didn't call UNO, penalize
+        if (state.handOf(prevPlayer).size() == 1 && !state.hasCalledUno(prevPlayer)) {
+            String prevName = state.nameOf(prevPlayer);
+            view.showUnoPenalty(prevName);
+            state.handOf(prevPlayer).add(state.drawFromDeck());
+            state.handOf(prevPlayer).add(state.drawFromDeck());
+            logger.info(prevName + " missed UNO call and drew 2 penalty cards");
+        }
+    }
 
     /**
      * Apply the effect of the just-played card.

@@ -1,4 +1,3 @@
-cat > README.md << 'EOF'
 # UNO CLI Game
 
 ## Quick Start
@@ -27,6 +26,3 @@ java -jar target/uno-cli.jar --bots 3 --games 1 --quiet
 docker build -t uno-cli:latest .
 docker run uno-cli:latest --bots 2
 ```
-
-See full documentation in the project files.
-EOF
